@@ -1,35 +1,29 @@
 import os
+
 from datasets import load_dataset
-from transformers import (
-    AutoTokenizer,
-    AutoModelForMaskedLM,
-    DataCollatorForLanguageModeling,
-    TrainingArguments,
+from transformers import AutoTokenizer, AutoModelForMaskedLM, DataCollatorForLanguageModeling, TrainingArguments, \
     Trainer
-)
-from huggingface_hub import login
+from dotenv import load_dotenv
+
+load_dotenv()
+
+
+def filter_func(examples):
+    kjh_sent = examples["kjh"]
+    return kjh_sent is not None and len(kjh_sent) > 4
 
 
 def main():
-    login()  # Потребует токен, если вы сохраняете модель на Hub
-
-    model_name = "cointegrated/LaBSE-en-ru"
+    model_name = "sentence-transformers/LaBSE"
     output_dir = "/content/drive/MyDrive/article khakas-mt/labse-khakas-mlm"
 
-    # 1. Загружаем токенизатор и модель для MLM (с "головой" для предсказания слов)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForMaskedLM.from_pretrained(model_name)
+    model = AutoModelForMaskedLM.from_pretrained("sentence-transformers/LaBSE")
 
-    # 2. Загружаем и чистим данные
-    raw_dataset = load_dataset("adeshkin/google-smol-en-ru-kjh", split="train")
-
-    def clean_func(examples):
-        kjh = examples["kjh"]
-        return kjh is not None and len(kjh) > 4
+    raw_dataset1 = load_dataset("adeshkin/khakas-russian-parallel-corpus", split="train", token=os.getenv("TOKEN"))
+    raw_dataset2 = load_dataset("adeshkin/khakas-monolingual-corpus", split="train")
 
     dataset = raw_dataset.filter(clean_func)
-
-    # Оставляем только колонку с хакасским языком
     dataset = dataset.select_columns(["kjh"])
 
     # 3. Токенизация и нарезка текста на чанки (блоки)
@@ -100,6 +94,7 @@ def main():
 
     # 7. Сохраняем финальную модель и токенизатор
     trainer.save_model(output_dir)
+    trainer.push_to_hub()
     tokenizer.save_pretrained(output_dir)
     print(f"Модель сохранена в {output_dir}")
 
